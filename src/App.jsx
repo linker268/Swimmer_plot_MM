@@ -24,6 +24,7 @@ const App = () => {
     SD: '#7FBADC',    // Stable Disease - 파란색
     PD: '#8B8B8B',    // Progressive Disease - 회색
     ASCT: '#9B59B6',  // ASCT - 보라
+    Death: '#E53935', // Death - 빨강
     bar: '#87CEEB',
   };
 
@@ -89,11 +90,19 @@ const App = () => {
         }
       }
 
+      let deathMonth = null;
+      if (row.Death_date) {
+        const deathDate = parseDate(row.Death_date);
+        if (deathDate) {
+          deathMonth = (deathDate - c1d1) / (1000 * 60 * 60 * 24 * 30.44);
+        }
+      }
+
       const lastResponseDate = responses.length > 0 
         ? Math.max(...responses.map(r => r.month))
         : 0;
       
-      const duration = Math.max(lastResponseDate, asctMonth || 0, 1);
+      const duration = Math.max(lastResponseDate, asctMonth || 0, deathMonth || 0, 1);
 
       return {
         id: row.Patient_ID || `Patient ${index + 1}`,
@@ -101,6 +110,7 @@ const App = () => {
         duration,
         responses,
         asctMonth,
+        deathMonth,
       };
     }).filter(Boolean);
   };
@@ -476,7 +486,8 @@ const App = () => {
               • <code>Patient_ID</code> - 환자 ID<br/>
               • <code>C1D1</code> - 치료 시작일<br/>
               • <code>Resp_date1, Response1, ...</code> - 반응 평가 (sCR/CR/VGPR/PR/MR/SD/PD)<br/>
-              • <code>ASCT_date</code> - ASCT 날짜 (선택)
+              • <code>ASCT_date</code> - ASCT 날짜 (선택)<br/>
+              • <code>Death_date</code> - 사망 날짜 (선택)
             </p>
           </div>
           <input
@@ -585,6 +596,13 @@ const App = () => {
                 </svg>
                 <span>ASCT</span>
               </div>
+              <div className="legend-item">
+                <svg width="14" height="14">
+                  <line x1="2" y1="2" x2="12" y2="12" stroke={colors.Death} strokeWidth="2.5"/>
+                  <line x1="12" y1="2" x2="2" y2="12" stroke={colors.Death} strokeWidth="2.5"/>
+                </svg>
+                <span>Death</span>
+              </div>
             </div>
 
             <svg 
@@ -682,6 +700,27 @@ const App = () => {
                             stroke="#fff"
                             strokeWidth="1"
                           />
+                        )}
+                        
+                        {patient.deathMonth && (
+                          <g>
+                            <line
+                              x1={100 + (patient.deathMonth / maxDuration) * 700 - 5}
+                              y1={y + settings.barHeight / 2 - 5}
+                              x2={100 + (patient.deathMonth / maxDuration) * 700 + 5}
+                              y2={y + settings.barHeight / 2 + 5}
+                              stroke={colors.Death}
+                              strokeWidth="2.5"
+                            />
+                            <line
+                              x1={100 + (patient.deathMonth / maxDuration) * 700 + 5}
+                              y1={y + settings.barHeight / 2 - 5}
+                              x2={100 + (patient.deathMonth / maxDuration) * 700 - 5}
+                              y2={y + settings.barHeight / 2 + 5}
+                              stroke={colors.Death}
+                              strokeWidth="2.5"
+                            />
+                          </g>
                         )}
                       </g>
                     );
