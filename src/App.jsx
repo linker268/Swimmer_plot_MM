@@ -11,21 +11,21 @@ const App = () => {
     groupByCohort: true,
     showGrid: true,
     barHeight: 20,
-    barGap: 8,
+    barGap: 22,
   });
 
   // MM Response criteria colors
   const colors = {
-    sCR: '#1a7431',   // Stringent CR - 진한 초록
+    sCR: '#0B5D3B',   // Stringent CR - 진한 초록
     CR: '#2E9B6F',    // Complete Response - 초록
-    VGPR: '#7CB342',  // Very Good PR - 연두
-    PR: '#F5C342',    // Partial Response - 노랑
+    VGPR: '#8FD14F',  // Very Good PR - 연두
+    PR: '#7FBADC',    // Partial Response - 파랑
     MR: '#FF9800',    // Minimal Response - 주황
-    SD: '#7FBADC',    // Stable Disease - 파란색
+    SD: '#F5C342',    // Stable Disease - 노랑
     PD: '#8B8B8B',    // Progressive Disease - 회색
     ASCT: '#9B59B6',  // ASCT - 보라
     Death: '#E53935', // Death - 빨강
-    bar: '#87CEEB',
+    bar: '#B8C0CC',   // 환자 타임라인 막대 - 중립 회색
   };
 
   const responseOrder = ['sCR', 'CR', 'VGPR', 'PR', 'MR', 'SD', 'PD'];
@@ -62,55 +62,59 @@ const App = () => {
   }, []);
 
   const processData = (rawData) => {
+    const MS = 1000 * 60 * 60 * 24 * 30.44;
     return rawData.map((row, index) => {
       const c1d1 = parseDate(row.C1D1);
       if (!c1d1) return null;
+      const mo = (v) => { const d = parseDate(v); return d ? (d - c1d1) / MS : null; };
 
       const responses = [];
       for (let i = 1; i <= 10; i++) {
-        const dateKey = `Resp_date${i}`;
-        const respKey = `Response${i}`;
-        if (row[dateKey] && row[respKey]) {
-          const respDate = parseDate(row[dateKey]);
-          if (respDate) {
-            const months = (respDate - c1d1) / (1000 * 60 * 60 * 24 * 30.44);
-            responses.push({
-              month: months,
-              response: row[respKey],
-            });
+        const d = row[`Resp_date${i}`], r = row[`Response${i}`];
+        if (d && r) { const m = mo(d); if (m !== null) responses.push({ month: m, response: String(r).trim() }); }
+      }
+
+      const aes = [];
+      for (let i = 1; i <= 10; i++) {
+        const nm = row[`AE_name${i}`], d = row[`AE_date${i}`];
+        if (nm && d) {
+          const m = mo(d);
+          if (m !== null) {
+            const g = row[`AE_grade${i}`];
+            aes.push({ month: m, name: String(nm).trim(), grade: (g !== undefined && g !== null && g !== '') ? String(g).trim() : null });
           }
         }
       }
 
-      let asctMonth = null;
-      if (row.ASCT_date) {
-        const asctDate = parseDate(row.ASCT_date);
-        if (asctDate) {
-          asctMonth = (asctDate - c1d1) / (1000 * 60 * 60 * 24 * 30.44);
-        }
-      }
+      const asctMonth = row.ASCT_date ? mo(row.ASCT_date) : null;
+      const deathMonth = row.Death_date ? mo(row.Death_date) : null;
+      const lastRespMonth = responses.length ? Math.max(...responses.map(r => r.month)) : 0;
 
-      let deathMonth = null;
-      if (row.Death_date) {
-        const deathDate = parseDate(row.Death_date);
-        if (deathDate) {
-          deathMonth = (deathDate - c1d1) / (1000 * 60 * 60 * 24 * 30.44);
-        }
-      }
+      let txStatus = String(row.Tx_status || '').trim().toLowerCase();
+      if (!['ongoing', 'eot', 'dropout'].includes(txStatus)) txStatus = (deathMonth !== null) ? 'death' : 'ongoing';
 
-      const lastResponseDate = responses.length > 0 
-        ? Math.max(...responses.map(r => r.month))
-        : 0;
-      
-      const duration = Math.max(lastResponseDate, asctMonth || 0, deathMonth || 0, 1);
+      const endRaw = row.EOT_date || row.Dropout_date || row.LastDose_date;
+      let treatEnd = (endRaw !== undefined && endRaw !== null && endRaw !== '') ? mo(endRaw) : null;
+      if (treatEnd === null) treatEnd = (deathMonth !== null) ? deathMonth : Math.max(lastRespMonth, asctMonth || 0, 1);
+
+      let lastFu = (row.LastFU_date !== undefined && row.LastFU_date !== null && row.LastFU_date !== '') ? mo(row.LastFU_date) : null;
+      if (lastFu === null) lastFu = Math.max(lastRespMonth, deathMonth || 0, treatEnd);
+
+      const rowEnd = Math.max(treatEnd, lastFu, deathMonth || 0, lastRespMonth, asctMonth || 0, 1);
+      const name = (row.Name !== undefined && row.Name !== null && row.Name !== '') ? String(row.Name).trim() : (row.Patient_ID || `Patient ${index + 1}`);
 
       return {
         id: row.Patient_ID || `Patient ${index + 1}`,
+        name,
         cohort: row.Cohort || 'Unknown',
-        duration,
+        duration: rowEnd,
         responses,
+        aes,
         asctMonth,
         deathMonth,
+        txStatus,
+        treatEnd,
+        lastFu,
       };
     }).filter(Boolean);
   };
@@ -165,6 +169,15 @@ const App = () => {
     return Math.ceil(Math.max(...data.map(d => d.duration)) / 3) * 3 + 3;
   }, [data]);
 
+  const LEFT = 165, PW = 630;
+  const X = (m) => LEFT + (m / maxDuration) * PW;
+  const SUMX = 900, SUMH = 150, SBARW = 46;
+  const RESP_ORDER = colors.sCR ? ['sCR', 'CR', 'VGPR', 'PR'] : ['CR', 'PR'];
+  const RANK = colors.sCR
+    ? { sCR: 7, CR: 6, VGPR: 5, PR: 4, MR: 3, SD: 2, PD: 1 }
+    : { CR: 4, PR: 3, SD: 2, PD: 1 };
+  const showBrackets = !!colors.sCR;
+
   const downloadSVG = () => {
     const svg = document.getElementById('swimmer-plot-svg');
     if (!svg) return;
@@ -190,7 +203,7 @@ const App = () => {
     const svgData = new XMLSerializer().serializeToString(svg);
     const img = new Image();
     
-    canvas.width = 1800;
+    canvas.width = svg.getBoundingClientRect().width * 2;
     canvas.height = svg.getBoundingClientRect().height * 2;
     
     img.onload = () => {
@@ -487,7 +500,14 @@ const App = () => {
               • <code>C1D1</code> - 치료 시작일<br/>
               • <code>Resp_date1, Response1, ...</code> - 반응 평가 (sCR/CR/VGPR/PR/MR/SD/PD)<br/>
               • <code>ASCT_date</code> - ASCT 날짜 (선택)<br/>
-              • <code>Death_date</code> - 사망 날짜 (선택)
+              • <code>Death_date</code> - 사망 날짜 (선택)<br/>
+              • <code>Name</code> - 환자 이름 (표시용, 선택)<br/>
+              • <code>Tx_status</code> - ongoing / EOT / dropout (선택)<br/>
+              • <code>LastDose_date</code> - 마지막 투여일=진행중(▶) 끝점 (선택)<br/>
+              • <code>EOT_date</code> - 치료종료(EOT)일 = | 위치 (선택)<br/>
+              • <code>Dropout_date</code> - 중도탈락일 = ⁄⁄ 위치 (선택)<br/>
+              • <code>LastFU_date</code> - 마지막 추적일 (선택)<br/>
+              • <code>AE_name1, AE_date1, AE_grade1, ...</code> - 부작용 (선택)
             </p>
           </div>
           <input
@@ -590,6 +610,7 @@ const App = () => {
                 <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill={colors.PD}/></svg>
                 <span>PD (Progressive Disease)</span>
               </div>
+              <div style={{ flexBasis: '100%', height: 0 }} />
               <div className="legend-item">
                 <svg width="14" height="14">
                   <polygon points="7,1 13,7 7,13 1,7" fill={colors.ASCT}/>
@@ -603,59 +624,48 @@ const App = () => {
                 </svg>
                 <span>Death</span>
               </div>
+              <div className="legend-item">
+                <svg width="16" height="14"><polygon points="2,3 12,7 2,11" fill="#374151"/></svg>
+                <span>치료 진행중 (▶)</span>
+              </div>
+              <div className="legend-item">
+                <svg width="16" height="14"><line x1="8" y1="1" x2="8" y2="13" stroke="#374151" strokeWidth="3"/></svg>
+                <span>EOT (이후 FU 점선)</span>
+              </div>
+              <div className="legend-item">
+                <svg width="18" height="14"><line x1="4" y1="12" x2="10" y2="2" stroke="#374151" strokeWidth="2.5"/><line x1="9" y1="12" x2="15" y2="2" stroke="#374151" strokeWidth="2.5"/></svg>
+                <span>Drop-out</span>
+              </div>
+              <div className="legend-item">
+                <svg width="14" height="14"><circle cx="7" cy="7" r="4.5" fill="#111"/></svg>
+                <span>AE (막대 위 라벨)</span>
+              </div>
             </div>
 
             <svg 
               id="swimmer-plot-svg"
-              width="900" 
+              width="1180" 
               height={svgHeight}
               style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}
             >
               {settings.showGrid && Array.from({ length: Math.floor(maxDuration / 3) + 1 }, (_, i) => i * 3).map(month => (
-                <line
-                  key={month}
-                  x1={100 + (month / maxDuration) * 700}
-                  y1={40}
-                  x2={100 + (month / maxDuration) * 700}
-                  y2={svgHeight - 40}
-                  stroke="#e0e0e0"
-                  strokeDasharray="4,4"
-                />
+                <line key={month} x1={X(month)} y1={40} x2={X(month)} y2={svgHeight - 40} stroke="#e0e0e0" strokeDasharray="4,4"/>
               ))}
 
-              <line x1="100" y1={svgHeight - 40} x2="800" y2={svgHeight - 40} stroke="#333" strokeWidth="1"/>
-              
+              <line x1={LEFT} y1={svgHeight - 40} x2={LEFT + PW} y2={svgHeight - 40} stroke="#333" strokeWidth="1"/>
+
               {Array.from({ length: Math.floor(maxDuration / 3) + 1 }, (_, i) => i * 3).map(month => (
                 <g key={month}>
-                  <line
-                    x1={100 + (month / maxDuration) * 700}
-                    y1={svgHeight - 40}
-                    x2={100 + (month / maxDuration) * 700}
-                    y2={svgHeight - 35}
-                    stroke="#333"
-                  />
-                  <text
-                    x={100 + (month / maxDuration) * 700}
-                    y={svgHeight - 20}
-                    textAnchor="middle"
-                    fontSize="12"
-                    fill="#333"
-                  >
-                    {month}
-                  </text>
+                  <line x1={X(month)} y1={svgHeight - 40} x2={X(month)} y2={svgHeight - 35} stroke="#333"/>
+                  <text x={X(month)} y={svgHeight - 20} textAnchor="middle" fontSize="12" fill="#333">{month}</text>
                 </g>
               ))}
-              
-              <text
-                x={450}
-                y={svgHeight - 2}
-                textAnchor="middle"
-                fontSize="13"
-                fill="#333"
-                fontWeight="500"
-              >
+
+              <text x={LEFT + PW / 2} y={svgHeight - 2} textAnchor="middle" fontSize="13" fill="#333" fontWeight="500">
                 Time on treatment (months)
               </text>
+
+              <text x={SUMX} y={34} textAnchor="middle" fontSize="13" fontWeight="700" fill="#333">Best response</text>
 
               {sortedData && (() => {
                 let yOffset = 50;
@@ -663,96 +673,116 @@ const App = () => {
                   const cohortStart = yOffset;
                   const cohortBars = patients.map((patient, idx) => {
                     const y = yOffset + idx * (settings.barHeight + settings.barGap);
-                    const barWidth = (patient.duration / maxDuration) * 700;
-                    
+                    const cy = y + settings.barHeight / 2;
+                    const treatX = X(patient.treatEnd);
+                    const st = patient.txStatus;
+                    const mk = '#374151';
                     return (
                       <g key={patient.id}>
-                        <rect
-                          x={100}
-                          y={y}
-                          width={barWidth}
-                          height={settings.barHeight}
-                          fill={colors.bar}
-                          rx={3}
-                          opacity={0.85}
-                        />
-                        
-                        {patient.responses.map((resp, i) => {
-                          const cx = 100 + (resp.month / maxDuration) * 700;
-                          const cy = y + settings.barHeight / 2;
+                        <text x={LEFT - 10} y={cy + 4} textAnchor="end" fontSize="11" fill="#333">{patient.name}</text>
+
+                        <rect x={LEFT} y={y} width={Math.max(treatX - LEFT, 0)} height={settings.barHeight} fill={colors.bar} rx={3} opacity={0.9}/>
+
+                        {st === 'eot' && patient.lastFu > patient.treatEnd && (
+                          <line x1={treatX} y1={cy} x2={X(patient.lastFu)} y2={cy} stroke="#9AA0AA" strokeWidth="2" strokeDasharray="2 4"/>
+                        )}
+
+                        {patient.responses.map((resp, i) => (
+                          <circle key={i} cx={X(resp.month)} cy={cy} r={6} fill={colors[resp.response] || '#999'} stroke="#fff" strokeWidth="1"/>
+                        ))}
+
+                        {patient.asctMonth != null && (
+                          <polygon points={`${X(patient.asctMonth)},${cy - 7} ${X(patient.asctMonth) + 7},${cy} ${X(patient.asctMonth)},${cy + 7} ${X(patient.asctMonth) - 7},${cy}`} fill={colors.ASCT} stroke="#fff" strokeWidth="1"/>
+                        )}
+
+                        {patient.aes.map((ae, i) => {
+                          const ax = X(ae.month);
+                          const topY = y - 4;
                           return (
-                            <circle
-                              key={i}
-                              cx={cx}
-                              cy={cy}
-                              r={6}
-                              fill={colors[resp.response] || '#999'}
-                              stroke="#fff"
-                              strokeWidth="1"
-                            />
+                            <g key={`ae${i}`}>
+                              <line x1={ax} y1={cy} x2={ax} y2={topY} stroke="#111" strokeWidth="1.2"/>
+                              <text x={ax} y={topY - 3} textAnchor="middle" fontSize="9.5" fill="#111">{ae.name}{ae.grade ? ` (Gr${ae.grade})` : ''}</text>
+                              <circle cx={ax} cy={cy} r={4.5} fill="#111" stroke="#fff" strokeWidth="1.2"/>
+                            </g>
                           );
                         })}
-                        
-                        {patient.asctMonth && (
-                          <polygon
-                            points={`${100 + (patient.asctMonth / maxDuration) * 700},${y + settings.barHeight / 2 - 7} ${100 + (patient.asctMonth / maxDuration) * 700 + 7},${y + settings.barHeight / 2} ${100 + (patient.asctMonth / maxDuration) * 700},${y + settings.barHeight / 2 + 7} ${100 + (patient.asctMonth / maxDuration) * 700 - 7},${y + settings.barHeight / 2}`}
-                            fill={colors.ASCT}
-                            stroke="#fff"
-                            strokeWidth="1"
-                          />
+
+                        {st === 'ongoing' && (
+                          <polygon points={`${treatX},${cy - 8} ${treatX + 16},${cy} ${treatX},${cy + 8}`} fill={mk}/>
                         )}
-                        
-                        {patient.deathMonth && (
+                        {st === 'eot' && (
+                          <line x1={treatX} y1={cy - 11} x2={treatX} y2={cy + 11} stroke={mk} strokeWidth="3.5"/>
+                        )}
+                        {st === 'dropout' && (
                           <g>
-                            <line
-                              x1={100 + (patient.deathMonth / maxDuration) * 700 - 5}
-                              y1={y + settings.barHeight / 2 - 5}
-                              x2={100 + (patient.deathMonth / maxDuration) * 700 + 5}
-                              y2={y + settings.barHeight / 2 + 5}
-                              stroke={colors.Death}
-                              strokeWidth="2.5"
-                            />
-                            <line
-                              x1={100 + (patient.deathMonth / maxDuration) * 700 + 5}
-                              y1={y + settings.barHeight / 2 - 5}
-                              x2={100 + (patient.deathMonth / maxDuration) * 700 - 5}
-                              y2={y + settings.barHeight / 2 + 5}
-                              stroke={colors.Death}
-                              strokeWidth="2.5"
-                            />
+                            <line x1={treatX - 4} y1={cy + 10} x2={treatX + 4} y2={cy - 10} stroke={mk} strokeWidth="3"/>
+                            <line x1={treatX + 4} y1={cy + 10} x2={treatX + 12} y2={cy - 10} stroke={mk} strokeWidth="3"/>
+                          </g>
+                        )}
+
+                        {patient.deathMonth != null && (
+                          <g>
+                            <line x1={X(patient.deathMonth) - 5} y1={cy - 5} x2={X(patient.deathMonth) + 5} y2={cy + 5} stroke={colors.Death} strokeWidth="2.5"/>
+                            <line x1={X(patient.deathMonth) + 5} y1={cy - 5} x2={X(patient.deathMonth) - 5} y2={cy + 5} stroke={colors.Death} strokeWidth="2.5"/>
                           </g>
                         )}
                       </g>
                     );
                   });
-                  
+
                   const cohortHeight = patients.length * (settings.barHeight + settings.barGap);
                   yOffset += cohortHeight + 40;
-                  
+
+                  const bandCY = cohortStart + cohortHeight / 2;
+                  const nSum = patients.length;
+                  const cnt = {};
+                  patients.forEach(p => {
+                    let best = null, br = -1;
+                    p.responses.forEach(r => { const rk = RANK[r.response]; if (rk !== undefined && rk > br) { br = rk; best = r.response; } });
+                    if (best && RESP_ORDER.includes(best)) cnt[best] = (cnt[best] || 0) + 1;
+                  });
+                  const pct = {}; RESP_ORDER.forEach(k => { pct[k] = nSum ? (cnt[k] || 0) / nSum * 100 : 0; });
+                  const orr = RESP_ORDER.reduce((sum, k) => sum + pct[k], 0);
+                  const geCR = (pct.sCR || 0) + (pct.CR || 0);
+                  const geVGPR = geCR + (pct.VGPR || 0);
+                  const sBottom = bandCY + SUMH / 2;
+                  const sY = (p) => sBottom - p * SUMH / 100;
+                  let scum = 0;
+                  const segs = RESP_ORDER.map(k => { const v = pct[k]; const seg = { k, v, y0: sY(scum + v), y1: sY(scum) }; scum += v; return seg; });
+
                   return (
                     <g key={cohort}>
                       {settings.groupByCohort && sortedData.length > 1 && (
                         <>
-                          <text
-                            x={50}
-                            y={cohortStart + cohortHeight / 2}
-                            textAnchor="middle"
-                            fontSize="14"
-                            fontWeight="600"
-                            fill="#333"
-                            transform={`rotate(-90, 50, ${cohortStart + cohortHeight / 2})`}
-                          >
-                            {cohort === 'A' ? 'Arm A' : cohort === 'B' ? 'Arm B' : cohort}
+                          <text x={28} y={cohortStart + cohortHeight / 2} textAnchor="middle" fontSize="14" fontWeight="600" fill="#333" transform={`rotate(-90, 28, ${cohortStart + cohortHeight / 2})`}>
+                            {cohort}
                           </text>
-                          <path
-                            d={`M 70 ${cohortStart} L 75 ${cohortStart} L 75 ${cohortStart + cohortHeight - settings.barGap} L 70 ${cohortStart + cohortHeight - settings.barGap}`}
-                            stroke="#666"
-                            strokeWidth="1"
-                            fill="none"
-                          />
+                          <path d={`M 46 ${cohortStart} L 51 ${cohortStart} L 51 ${cohortStart + cohortHeight - settings.barGap} L 46 ${cohortStart + cohortHeight - settings.barGap}`} stroke="#666" strokeWidth="1" fill="none"/>
                         </>
                       )}
                       {cohortBars}
+
+                      <line x1={SUMX - SBARW / 2} y1={sY(100)} x2={SUMX + SBARW / 2} y2={sY(100)} stroke="#e5e5e5" strokeDasharray="3 3"/>
+                      <line x1={SUMX - SBARW / 2} y1={sY(0)} x2={SUMX + SBARW / 2} y2={sY(0)} stroke="#999"/>
+                      {segs.filter(sg => sg.v > 0).map(sg => (
+                        <g key={`sum-${sg.k}`}>
+                          <rect x={SUMX - SBARW / 2} y={sg.y0} width={SBARW} height={Math.max(sg.y1 - sg.y0, 0)} fill={colors[sg.k]} stroke="#fff" strokeWidth="1"/>
+                          {sg.v >= 6 && (
+                            <text x={SUMX} y={(sg.y0 + sg.y1) / 2 + 4} textAnchor="middle" fontSize="10.5" fill={(sg.k === 'sCR' || sg.k === 'CR') ? '#fff' : '#1a1a1a'}>{sg.k} {Math.round(sg.v)}%</text>
+                          )}
+                        </g>
+                      ))}
+                      <text x={SUMX} y={sY(orr) - 9} textAnchor="middle" fontSize="13" fontWeight="700" fill="#111">ORR {orr.toFixed(1)}%</text>
+                      {showBrackets && (
+                        <>
+                          <path d={`M ${SUMX - SBARW / 2 - 8} ${sY(0)} L ${SUMX - SBARW / 2 - 14} ${sY(0)} L ${SUMX - SBARW / 2 - 14} ${sY(geCR)} L ${SUMX - SBARW / 2 - 8} ${sY(geCR)}`} fill="none" stroke="#555" strokeWidth="1.2"/>
+                          <text x={SUMX - SBARW / 2 - 17} y={sY(geCR / 2) - 1} textAnchor="end" fontSize="10" fill="#333">≥CR</text>
+                          <text x={SUMX - SBARW / 2 - 17} y={sY(geCR / 2) + 11} textAnchor="end" fontSize="10" fill="#333">{geCR.toFixed(0)}%</text>
+                          <path d={`M ${SUMX + SBARW / 2 + 8} ${sY(0)} L ${SUMX + SBARW / 2 + 14} ${sY(0)} L ${SUMX + SBARW / 2 + 14} ${sY(geVGPR)} L ${SUMX + SBARW / 2 + 8} ${sY(geVGPR)}`} fill="none" stroke="#555" strokeWidth="1.2"/>
+                          <text x={SUMX + SBARW / 2 + 17} y={sY(geVGPR / 2) - 1} fontSize="10" fill="#333">≥VGPR</text>
+                          <text x={SUMX + SBARW / 2 + 17} y={sY(geVGPR / 2) + 11} fontSize="10" fill="#333">{geVGPR.toFixed(0)}%</text>
+                        </>
+                      )}
                     </g>
                   );
                 });
