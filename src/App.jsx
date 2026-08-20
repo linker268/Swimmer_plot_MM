@@ -16,6 +16,7 @@ const App = () => {
 
   // MM Response criteria colors
   const colors = {
+    'MRD-': '#053B26', // MRD negative - 가장 진한 초록 (흰 중심점으로 sCR과 구분)
     sCR: '#0B5D3B',   // Stringent CR - 진한 초록
     CR: '#2E9B6F',    // Complete Response - 초록
     VGPR: '#8FD14F',  // Very Good PR - 연두
@@ -71,7 +72,12 @@ const App = () => {
       const responses = [];
       for (let i = 1; i <= 10; i++) {
         const d = row[`Resp_date${i}`], r = row[`Response${i}`];
-        if (d && r) { const m = mo(d); if (m !== null) responses.push({ month: m, response: String(r).trim() }); }
+        if (d && r) {
+          const m = mo(d);
+          let resp = String(r).trim();
+          if (/mrd/i.test(resp)) resp = 'MRD-';           // MRD-, MRDneg, MRD(-) 등 모두 허용
+          if (m !== null) responses.push({ month: m, response: resp });
+        }
       }
 
       const aes = [];
@@ -171,10 +177,32 @@ const App = () => {
 
   const LEFT = 165, PW = 630;
   const X = (m) => LEFT + (m / maxDuration) * PW;
-  const SUMX = 900, SUMH = 150, SBARW = 46;
-  const RESP_ORDER = colors.sCR ? ['sCR', 'CR', 'VGPR', 'PR'] : ['CR', 'PR'];
+  const SUMX = 900, SUMH = 150, SBARW = 60;
+  // AE 라벨 층 배치 — 시간상 가까운 AE 라벨이 좌우로 겹칠 때만 위로 한 층(13px)씩 올린다.
+  // 층이 생긴 환자 줄만 그 층수만큼 간격이 넓어진다. 안 겹치면 간격 증가 없음.
+  const AE_TIER_H = 13;
+  const aeLayouts = useMemo(() => {
+    const m = new Map();
+    if (!data) return m;
+    const est = (t) => t.length * 5.4 + 6;               // 9.5px 폰트 근사 폭
+    data.forEach(p => {
+      const ends = [];                                    // 층별 마지막 라벨의 오른쪽 끝 x
+      const items = p.aes.slice().sort((a, b) => a.month - b.month).map(ae => {
+        const ax = LEFT + (ae.month / maxDuration) * PW;
+        const label = ae.name + (ae.grade ? ` Gr${ae.grade}` : '');
+        const w = est(label);
+        let tier = 0;
+        while (ends[tier] !== undefined && ax - w / 2 < ends[tier] + 6) tier++;
+        ends[tier] = ax + w / 2;
+        return { ...ae, ax, label, tier };
+      });
+      m.set(p, { items, extra: items.length ? Math.max(...items.map(i => i.tier)) * AE_TIER_H : 0 });
+    });
+    return m;
+  }, [data, maxDuration]);
+  const RESP_ORDER = colors.sCR ? ['MRD-', 'sCR', 'CR', 'VGPR', 'PR'] : ['CR', 'PR'];
   const RANK = colors.sCR
-    ? { sCR: 7, CR: 6, VGPR: 5, PR: 4, MR: 3, SD: 2, PD: 1 }
+    ? { 'MRD-': 8, sCR: 7, CR: 6, VGPR: 5, PR: 4, MR: 3, SD: 2, PD: 1 }
     : { CR: 4, PR: 3, SD: 2, PD: 1 };
   const showBrackets = !!colors.sCR;
 
@@ -203,8 +231,8 @@ const App = () => {
     const svgData = new XMLSerializer().serializeToString(svg);
     const img = new Image();
     
-    canvas.width = svg.getBoundingClientRect().width * 2;
-    canvas.height = svg.getBoundingClientRect().height * 2;
+    canvas.width = svg.getBoundingClientRect().width * 4;   // 4배 — 발표 확대에도 선명
+    canvas.height = svg.getBoundingClientRect().height * 4;
     
     img.onload = () => {
       ctx.fillStyle = '#ffffff';
@@ -224,10 +252,11 @@ const App = () => {
     ? sortedData.reduce((sum, [_, patients]) => sum + patients.length, 0) 
     : 0;
   
-  const svgHeight = sortedData 
-    ? sortedData.reduce((sum, [cohort, patients]) => {
-        return sum + patients.length * (settings.barHeight + settings.barGap) + 40;
-      }, 80)
+  const svgHeight = sortedData
+    ? sortedData.reduce((sum, [, patients]) => sum + patients.reduce((s, p) => {
+        const lay = aeLayouts.get(p);
+        return s + settings.barHeight + settings.barGap + (lay ? lay.extra : 0);
+      }, 0) + 40, 80)
     : 400;
 
   return (
@@ -498,7 +527,7 @@ const App = () => {
               • <code>Cohort</code> - 코호트/Arm 구분 (선택)<br/>
               • <code>Patient_ID</code> - 환자 ID<br/>
               • <code>C1D1</code> - 치료 시작일<br/>
-              • <code>Resp_date1, Response1, ...</code> - 반응 평가 (sCR/CR/VGPR/PR/MR/SD/PD)<br/>
+              • <code>Resp_date1, Response1, ...</code> - 반응 평가 (MRD-/sCR/CR/VGPR/PR/MR/SD/PD)<br/>
               • <code>ASCT_date</code> - ASCT 날짜 (선택)<br/>
               • <code>Death_date</code> - 사망 날짜 (선택)<br/>
               • <code>Name</code> - 환자 이름 (표시용, 선택)<br/>
@@ -583,6 +612,10 @@ const App = () => {
           <div className="chart-container">
             <div className="legend">
               <div className="legend-item">
+                <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill={colors['MRD-']}/><circle cx="7" cy="7" r="1.8" fill="#fff"/></svg>
+                <span>MRD− (MRD negative)</span>
+              </div>
+              <div className="legend-item">
                 <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill={colors.sCR}/></svg>
                 <span>sCR (Stringent CR)</span>
               </div>
@@ -665,14 +698,21 @@ const App = () => {
                 Time on treatment (months)
               </text>
 
-              <text x={SUMX} y={34} textAnchor="middle" fontSize="13" fontWeight="700" fill="#333">Best response</text>
+              <text x={SUMX} y={20} textAnchor="middle" fontSize="13" fontWeight="700" fill="#333">Best response</text>
 
               {sortedData && (() => {
                 let yOffset = 50;
                 return sortedData.map(([cohort, patients]) => {
                   const cohortStart = yOffset;
+                  let py = yOffset;
+                  const rowPos = patients.map(p => {
+                    const lay = aeLayouts.get(p) || { items: [], extra: 0 };
+                    const y = py + lay.extra;             // 라벨 공간을 위에 확보
+                    py += settings.barHeight + settings.barGap + lay.extra;
+                    return { y, lay };
+                  });
                   const cohortBars = patients.map((patient, idx) => {
-                    const y = yOffset + idx * (settings.barHeight + settings.barGap);
+                    const { y, lay } = rowPos[idx];
                     const cy = y + settings.barHeight / 2;
                     const treatX = X(patient.treatEnd);
                     const st = patient.txStatus;
@@ -688,27 +728,29 @@ const App = () => {
                         )}
 
                         {patient.responses.map((resp, i) => (
-                          <circle key={i} cx={X(resp.month)} cy={cy} r={6} fill={colors[resp.response] || '#999'} stroke="#fff" strokeWidth="1"/>
+                          <g key={i}>
+                            <circle cx={X(resp.month)} cy={cy} r={6} fill={colors[resp.response] || '#999'} stroke="#fff" strokeWidth="1"/>
+                            {resp.response === 'MRD-' && <circle cx={X(resp.month)} cy={cy} r={2.1} fill="#fff"/>}
+                          </g>
                         ))}
 
                         {patient.asctMonth != null && (
                           <polygon points={`${X(patient.asctMonth)},${cy - 7} ${X(patient.asctMonth) + 7},${cy} ${X(patient.asctMonth)},${cy + 7} ${X(patient.asctMonth) - 7},${cy}`} fill={colors.ASCT} stroke="#fff" strokeWidth="1"/>
                         )}
 
-                        {patient.aes.map((ae, i) => {
-                          const ax = X(ae.month);
-                          const topY = y - 4;
+                        {lay.items.map((ae, i) => {
+                          const topY = y - 4 - ae.tier * AE_TIER_H;
                           return (
                             <g key={`ae${i}`}>
-                              <line x1={ax} y1={cy} x2={ax} y2={topY} stroke="#111" strokeWidth="1.2"/>
-                              <text x={ax} y={topY - 3} textAnchor="middle" fontSize="9.5" fill="#111">{ae.name}{ae.grade ? ` (Gr${ae.grade})` : ''}</text>
-                              <circle cx={ax} cy={cy} r={4.5} fill="#111" stroke="#fff" strokeWidth="1.2"/>
+                              <line x1={ae.ax} y1={cy} x2={ae.ax} y2={topY} stroke="#111" strokeWidth="1.2" opacity="0.75"/>
+                              <text x={ae.ax} y={topY - 3} textAnchor="middle" fontSize="9.5" fill="#111">{ae.label}</text>
+                              <circle cx={ae.ax} cy={cy} r={4.5} fill="#111" stroke="#fff" strokeWidth="1.2"/>
                             </g>
                           );
                         })}
 
                         {st === 'ongoing' && (
-                          <polygon points={`${treatX},${cy - 8} ${treatX + 16},${cy} ${treatX},${cy + 8}`} fill={mk}/>
+                          <polygon points={`${treatX + 8},${cy - 6} ${treatX + 19},${cy} ${treatX + 8},${cy + 6}`} fill={mk}/>
                         )}
                         {st === 'eot' && (
                           <line x1={treatX} y1={cy - 11} x2={treatX} y2={cy + 11} stroke={mk} strokeWidth="3.5"/>
@@ -730,7 +772,7 @@ const App = () => {
                     );
                   });
 
-                  const cohortHeight = patients.length * (settings.barHeight + settings.barGap);
+                  const cohortHeight = py - cohortStart;
                   yOffset += cohortHeight + 40;
 
                   const bandCY = cohortStart + cohortHeight / 2;
@@ -743,10 +785,11 @@ const App = () => {
                   });
                   const pct = {}; RESP_ORDER.forEach(k => { pct[k] = nSum ? (cnt[k] || 0) / nSum * 100 : 0; });
                   const orr = RESP_ORDER.reduce((sum, k) => sum + pct[k], 0);
-                  const geCR = (pct.sCR || 0) + (pct.CR || 0);
+                  const geCR = (pct['MRD-'] || 0) + (pct.sCR || 0) + (pct.CR || 0);
                   const geVGPR = geCR + (pct.VGPR || 0);
-                  const sBottom = bandCY + SUMH / 2;
-                  const sY = (p) => sBottom - p * SUMH / 100;
+                  const sumH = Math.min(SUMH, Math.max(cohortHeight - 10, 60));   // 코호트 밴드보다 커지지 않게
+                  const sBottom = bandCY + sumH / 2;
+                  const sY = (p) => sBottom - p * sumH / 100;
                   let scum = 0;
                   const segs = RESP_ORDER.map(k => { const v = pct[k]; const seg = { k, v, y0: sY(scum + v), y1: sY(scum) }; scum += v; return seg; });
 
@@ -768,16 +811,20 @@ const App = () => {
                         <g key={`sum-${sg.k}`}>
                           <rect x={SUMX - SBARW / 2} y={sg.y0} width={SBARW} height={Math.max(sg.y1 - sg.y0, 0)} fill={colors[sg.k]} stroke="#fff" strokeWidth="1"/>
                           {sg.v >= 6 && (
-                            <text x={SUMX} y={(sg.y0 + sg.y1) / 2 + 4} textAnchor="middle" fontSize="10.5" fill={(sg.k === 'sCR' || sg.k === 'CR') ? '#fff' : '#1a1a1a'}>{sg.k} {Math.round(sg.v)}%</text>
+                            <text x={SUMX} y={(sg.y0 + sg.y1) / 2 + 4} textAnchor="middle" fontSize={`${sg.k} ${Math.round(sg.v)}%`.length > 8 ? 9 : 10.5} fill={(sg.k === 'MRD-' || sg.k === 'sCR' || sg.k === 'CR') ? '#fff' : '#1a1a1a'}>{sg.k === 'MRD-' ? 'MRD−' : sg.k} {Math.round(sg.v)}%</text>
                           )}
                         </g>
                       ))}
                       <text x={SUMX} y={sY(orr) - 9} textAnchor="middle" fontSize="13" fontWeight="700" fill="#111">ORR {orr.toFixed(1)}%</text>
-                      {showBrackets && (
+                      {showBrackets && geCR > 0 && (
                         <>
                           <path d={`M ${SUMX - SBARW / 2 - 8} ${sY(0)} L ${SUMX - SBARW / 2 - 14} ${sY(0)} L ${SUMX - SBARW / 2 - 14} ${sY(geCR)} L ${SUMX - SBARW / 2 - 8} ${sY(geCR)}`} fill="none" stroke="#555" strokeWidth="1.2"/>
                           <text x={SUMX - SBARW / 2 - 17} y={sY(geCR / 2) - 1} textAnchor="end" fontSize="10" fill="#333">≥CR</text>
                           <text x={SUMX - SBARW / 2 - 17} y={sY(geCR / 2) + 11} textAnchor="end" fontSize="10" fill="#333">{geCR.toFixed(0)}%</text>
+                        </>
+                      )}
+                      {showBrackets && geVGPR > 0 && (
+                        <>
                           <path d={`M ${SUMX + SBARW / 2 + 8} ${sY(0)} L ${SUMX + SBARW / 2 + 14} ${sY(0)} L ${SUMX + SBARW / 2 + 14} ${sY(geVGPR)} L ${SUMX + SBARW / 2 + 8} ${sY(geVGPR)}`} fill="none" stroke="#555" strokeWidth="1.2"/>
                           <text x={SUMX + SBARW / 2 + 17} y={sY(geVGPR / 2) - 1} fontSize="10" fill="#333">≥VGPR</text>
                           <text x={SUMX + SBARW / 2 + 17} y={sY(geVGPR / 2) + 11} fontSize="10" fill="#333">{geVGPR.toFixed(0)}%</text>

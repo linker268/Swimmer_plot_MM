@@ -6,6 +6,7 @@
 
 | 반응 | 색상 | 설명 |
 |------|------|------|
+| MRD- | 가장 진한 초록 + 흰 중심점 | MRD negative (best response 최상위) |
 | sCR | 진한 초록 | Stringent Complete Response |
 | CR | 초록 | Complete Response |
 | VGPR | 연두 | Very Good Partial Response |

@@ -5,3 +5,6 @@ dist
 # Cowork 관리용 노트 (GitHub에는 올리지 않음)
 00_concept.md
 ; build log.md
+
+# Cowork 관리용 입력 템플릿 (GitHub 미포함)
+template/
