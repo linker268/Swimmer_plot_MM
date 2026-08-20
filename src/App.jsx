@@ -206,6 +206,30 @@ const App = () => {
     : { CR: 4, PR: 3, SD: 2, PD: 1 };
   const showBrackets = !!colors.sCR;
 
+  /* 범례 — 그림(SVG) 안 우측 세로 열. 화면과 SVG·PNG 내보내기가 항상 같다. */
+  const LEGX = 1075;
+  const Legend = () => {
+    let y = 50;
+    const out = [];
+    const add = (el, label) => {
+      out.push(<g key={label}>{el}<text x={LEGX + 16} y={y + 4} fontSize="11.5" fill="#333">{label}</text></g>);
+      y += 21;
+    };
+    Object.keys(RANK).forEach(k => add(
+      <g>
+        <circle cx={LEGX} cy={y} r={5.5} fill={colors[k] || '#999'} />
+        {k === 'MRD-' && <circle cx={LEGX} cy={y} r={2} fill="#fff" />}
+      </g>, k === 'MRD-' ? 'MRD−' : k));
+    y += 8;
+    add(<polygon points={`${LEGX},${y - 6} ${LEGX + 6},${y} ${LEGX},${y + 6} ${LEGX - 6},${y}`} fill={colors.ASCT} />, 'ASCT');
+    add(<g><line x1={LEGX - 5} y1={y - 5} x2={LEGX + 5} y2={y + 5} stroke={colors.Death} strokeWidth={2.5} /><line x1={LEGX + 5} y1={y - 5} x2={LEGX - 5} y2={y + 5} stroke={colors.Death} strokeWidth={2.5} /></g>, 'Death');
+    add(<polygon points={`${LEGX - 5},${y - 5} ${LEGX + 6},${y} ${LEGX - 5},${y + 5}`} fill="#374151" />, 'Ongoing');
+    add(<g><line x1={LEGX - 1} y1={y - 7} x2={LEGX - 1} y2={y + 7} stroke="#374151" strokeWidth={3} /><line x1={LEGX + 3} y1={y} x2={LEGX + 12} y2={y} stroke="#9AA0AA" strokeWidth={2} strokeDasharray="2 3" /></g>, 'EOT · FU');
+    add(<g><line x1={LEGX - 5} y1={y + 6} x2={LEGX + 1} y2={y - 6} stroke="#374151" strokeWidth={2.5} /><line x1={LEGX} y1={y + 6} x2={LEGX + 6} y2={y - 6} stroke="#374151" strokeWidth={2.5} /></g>, 'Drop-out');
+    add(<circle cx={LEGX} cy={y} r={4.5} fill="#111" />, 'AE');
+    return <g>{out}</g>;
+  };
+
   const downloadSVG = () => {
     const svg = document.getElementById('swimmer-plot-svg');
     if (!svg) return;
@@ -253,10 +277,10 @@ const App = () => {
     : 0;
   
   const svgHeight = sortedData
-    ? sortedData.reduce((sum, [, patients]) => sum + patients.reduce((s, p) => {
+    ? Math.max(sortedData.reduce((sum, [, patients]) => sum + patients.reduce((s, p) => {
         const lay = aeLayouts.get(p);
         return s + settings.barHeight + settings.barGap + (lay ? lay.extra : 0);
-      }, 0) + 40, 80)
+      }, 0) + 40, 80), 430)
     : 400;
 
   return (
@@ -610,77 +634,14 @@ const App = () => {
           </div>
 
           <div className="chart-container">
-            <div className="legend">
-              <div className="legend-item">
-                <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill={colors['MRD-']}/><circle cx="7" cy="7" r="1.8" fill="#fff"/></svg>
-                <span>MRD− (MRD negative)</span>
-              </div>
-              <div className="legend-item">
-                <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill={colors.sCR}/></svg>
-                <span>sCR (Stringent CR)</span>
-              </div>
-              <div className="legend-item">
-                <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill={colors.CR}/></svg>
-                <span>CR (Complete Response)</span>
-              </div>
-              <div className="legend-item">
-                <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill={colors.VGPR}/></svg>
-                <span>VGPR (Very Good PR)</span>
-              </div>
-              <div className="legend-item">
-                <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill={colors.PR}/></svg>
-                <span>PR (Partial Response)</span>
-              </div>
-              <div className="legend-item">
-                <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill={colors.MR}/></svg>
-                <span>MR (Minimal Response)</span>
-              </div>
-              <div className="legend-item">
-                <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill={colors.SD}/></svg>
-                <span>SD (Stable Disease)</span>
-              </div>
-              <div className="legend-item">
-                <svg width="14" height="14"><circle cx="7" cy="7" r="5" fill={colors.PD}/></svg>
-                <span>PD (Progressive Disease)</span>
-              </div>
-              <div style={{ flexBasis: '100%', height: 0 }} />
-              <div className="legend-item">
-                <svg width="14" height="14">
-                  <polygon points="7,1 13,7 7,13 1,7" fill={colors.ASCT}/>
-                </svg>
-                <span>ASCT</span>
-              </div>
-              <div className="legend-item">
-                <svg width="14" height="14">
-                  <line x1="2" y1="2" x2="12" y2="12" stroke={colors.Death} strokeWidth="2.5"/>
-                  <line x1="12" y1="2" x2="2" y2="12" stroke={colors.Death} strokeWidth="2.5"/>
-                </svg>
-                <span>Death</span>
-              </div>
-              <div className="legend-item">
-                <svg width="16" height="14"><polygon points="2,3 12,7 2,11" fill="#374151"/></svg>
-                <span>치료 진행중 (▶)</span>
-              </div>
-              <div className="legend-item">
-                <svg width="16" height="14"><line x1="8" y1="1" x2="8" y2="13" stroke="#374151" strokeWidth="3"/></svg>
-                <span>EOT (이후 FU 점선)</span>
-              </div>
-              <div className="legend-item">
-                <svg width="18" height="14"><line x1="4" y1="12" x2="10" y2="2" stroke="#374151" strokeWidth="2.5"/><line x1="9" y1="12" x2="15" y2="2" stroke="#374151" strokeWidth="2.5"/></svg>
-                <span>Drop-out</span>
-              </div>
-              <div className="legend-item">
-                <svg width="14" height="14"><circle cx="7" cy="7" r="4.5" fill="#111"/></svg>
-                <span>AE (막대 위 라벨)</span>
-              </div>
-            </div>
-
             <svg 
               id="swimmer-plot-svg"
               width="1180" 
               height={svgHeight}
               style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}
             >
+              <rect width="1180" height={svgHeight} fill="#ffffff" />
+              <Legend />
               {settings.showGrid && Array.from({ length: Math.floor(maxDuration / 3) + 1 }, (_, i) => i * 3).map(month => (
                 <line key={month} x1={X(month)} y1={40} x2={X(month)} y2={svgHeight - 40} stroke="#e0e0e0" strokeDasharray="4,4"/>
               ))}
