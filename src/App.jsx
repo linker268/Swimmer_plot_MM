@@ -16,16 +16,16 @@ const App = () => {
 
   // MM Response criteria colors
   const colors = {
-    'MRD-': '#053B26', // MRD negative - 가장 진한 초록 (흰 중심점으로 sCR과 구분)
-    sCR: '#0B5D3B',   // Stringent CR - 진한 초록
-    CR: '#2E9B6F',    // Complete Response - 초록
-    VGPR: '#8FD14F',  // Very Good PR - 연두
-    PR: '#7FBADC',    // Partial Response - 파랑
-    MR: '#FF9800',    // Minimal Response - 주황
-    SD: '#F5C342',    // Stable Disease - 노랑
-    PD: '#8B8B8B',    // Progressive Disease - 회색
+    'MRD-': '#0A2455', // MRD negative - 가장 진한 남색 (흰 중심점으로 sCR과 구분)
+    sCR: '#123C7A',   // Stringent CR - 진한 남색
+    CR: '#1F52A0',    // Complete Response - 진한 파랑
+    VGPR: '#2E6FBE',  // Very Good PR - 파랑
+    PR: '#3B8FD4',    // Partial Response - 중간 파랑
+    MR: '#63B3E0',    // Minimal Response - 밝은 파랑
+    SD: '#9BD3E8',    // Stable Disease - 연한 파랑
+    PD: '#D62728',    // Progressive Disease - 빨강 (경보)
     ASCT: '#9B59B6',  // ASCT - 보라
-    Death: '#E53935', // Death - 빨강
+    Death: '#7A0C0C', // Death - 진한 적갈색 (PD 빨강과 구분)
     bar: '#B8C0CC',   // 환자 타임라인 막대 - 중립 회색
   };
 
@@ -217,7 +217,7 @@ const App = () => {
     };
     Object.keys(RANK).forEach(k => add(
       <g>
-        <circle cx={LEGX} cy={y} r={5.5} fill={colors[k] || '#999'} />
+        <circle cx={LEGX} cy={y} r={5.5} fill={colors[k] || '#999'} stroke="#334155" strokeWidth="1" />
         {k === 'MRD-' && <circle cx={LEGX} cy={y} r={2} fill="#fff" />}
       </g>, k === 'MRD-' ? 'MRD−' : k));
     y += 8;
@@ -690,7 +690,7 @@ const App = () => {
 
                         {patient.responses.map((resp, i) => (
                           <g key={i}>
-                            <circle cx={X(resp.month)} cy={cy} r={6} fill={colors[resp.response] || '#999'} stroke="#fff" strokeWidth="1"/>
+                            <circle cx={X(resp.month)} cy={cy} r={6} fill={colors[resp.response] || '#999'} stroke="#334155" strokeWidth="1"/>
                             {resp.response === 'MRD-' && <circle cx={X(resp.month)} cy={cy} r={2.1} fill="#fff"/>}
                           </g>
                         ))}
@@ -772,7 +772,7 @@ const App = () => {
                         <g key={`sum-${sg.k}`}>
                           <rect x={SUMX - SBARW / 2} y={sg.y0} width={SBARW} height={Math.max(sg.y1 - sg.y0, 0)} fill={colors[sg.k]} stroke="#fff" strokeWidth="1"/>
                           {sg.v >= 6 && (
-                            <text x={SUMX} y={(sg.y0 + sg.y1) / 2 + 4} textAnchor="middle" fontSize={`${sg.k} ${Math.round(sg.v)}%`.length > 8 ? 9 : 10.5} fill={(sg.k === 'MRD-' || sg.k === 'sCR' || sg.k === 'CR') ? '#fff' : '#1a1a1a'}>{sg.k === 'MRD-' ? 'MRD−' : sg.k} {Math.round(sg.v)}%</text>
+                            <text x={SUMX} y={(sg.y0 + sg.y1) / 2 + 4} textAnchor="middle" fontSize={`${sg.k} ${Math.round(sg.v)}%`.length > 8 ? 9 : 10.5} fill={(sg.k === 'MRD-' || sg.k === 'sCR' || sg.k === 'CR' || sg.k === 'VGPR') ? '#fff' : '#1a1a1a'}>{sg.k === 'MRD-' ? 'MRD−' : sg.k} {Math.round(sg.v)}%</text>
                           )}
                         </g>
                       ))}
