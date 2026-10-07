@@ -697,7 +697,7 @@ const App = () => {
               ))}
 
               <text x={LEFT + PW / 2} y={svgHeight - 2} textAnchor="middle" fontSize="13" fill="#333" fontWeight="500">
-                Time on treatment (months)
+                Months from treatment start (C1D1)
               </text>
 
               <text x={SUMX} y={20} textAnchor="middle" fontSize="13" fontWeight="700" fill="#333">Best response</text>
