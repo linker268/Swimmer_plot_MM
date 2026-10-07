@@ -16,7 +16,6 @@ const App = () => {
 
   // MM Response criteria colors
   const colors = {
-    'MRD-': '#0A2455', // MRD negative - 가장 진한 남색 (흰 중심점으로 sCR과 구분)
     sCR: '#123C7A',   // Stringent CR - 진한 남색
     CR: '#1F52A0',    // Complete Response - 진한 파랑
     VGPR: '#2E6FBE',  // Very Good PR - 파랑
@@ -70,12 +69,23 @@ const App = () => {
       const mo = (v) => { const d = parseDate(v); return d ? (d - c1d1) / MS : null; };
 
       const responses = [];
+      const mrds = [];   // { month, result: 'neg' | 'pos' } — 막대 색이 아니라 검사 시점 마커
+      for (let i = 1; i <= 10; i++) {
+        const d = row[`MRD_date${i}`], r = row[`MRD_result${i}`];
+        if (d && r !== undefined && r !== null && r !== '') {
+          const m = mo(d);
+          const t = String(r).trim().toLowerCase();
+          const result = /^(neg|negative|-|n|0|mrd-|mrd−)$/.test(t) || /neg/.test(t) ? 'neg' : 'pos';
+          if (m !== null) mrds.push({ month: m, result });
+        }
+      }
       for (let i = 1; i <= 10; i++) {
         const d = row[`Resp_date${i}`], r = row[`Response${i}`];
         if (d && r) {
           const m = mo(d);
           let resp = String(r).trim();
-          if (/mrd/i.test(resp)) resp = 'MRD-';           // MRD-, MRDneg, MRD(-) 등 모두 허용
+          // 구버전 호환: Response 열에 MRD-가 들어오면 반응은 sCR로, MRD는 별도 마커로
+          if (/mrd/i.test(resp)) { if (m !== null) mrds.push({ month: m, result: 'neg' }); resp = 'sCR'; }
           if (m !== null) responses.push({ month: m, response: resp });
         }
       }
@@ -106,6 +116,29 @@ const App = () => {
       let lastFu = (row.LastFU_date !== undefined && row.LastFU_date !== null && row.LastFU_date !== '') ? mo(row.LastFU_date) : null;
       if (lastFu === null) lastFu = Math.max(lastRespMonth, deathMonth || 0, treatEnd);
 
+      // 반응은 다음 평가 전까지 유지된 것으로 간주한다.
+      // 실선 막대 끝 = PD일(PD가 있으면) / drop-out일 / 그 외 LastFU_date·Death_date까지.
+      // 회색 점선 = PD ● 이후 또는 drop-out // 이후에만 (사망·last FU까지).
+      responses.sort((a, b) => a.month - b.month);
+      const pdResp = responses.find(r => /^PD$/i.test(r.response));
+      const pdMonth = pdResp ? pdResp.month : null;
+      let solidEnd;
+      if (pdMonth !== null) solidEnd = pdMonth;
+      else if (txStatus === 'dropout') solidEnd = treatEnd;
+      else solidEnd = Math.max(treatEnd, lastFu, deathMonth || 0, lastRespMonth);
+      const afterEnd = Math.max(lastFu, deathMonth || 0);
+      const dashEnd = (pdMonth !== null || txStatus === 'dropout') && afterEnd > solidEnd ? afterEnd : null;
+
+      // 색 구간: C1D1→첫 평가 회색, 평가 k→평가 k+1 반응색 (PD는 구간이 아니라 ● 사건)
+      const segments = [];
+      const firstM = responses.length ? Math.min(responses[0].month, solidEnd) : solidEnd;
+      if (firstM > 0) segments.push({ from: 0, to: firstM, response: null });
+      responses.forEach((r, i) => {
+        if (/^PD$/i.test(r.response) || r.month >= solidEnd) return;
+        const next = responses[i + 1] ? Math.min(responses[i + 1].month, solidEnd) : solidEnd;
+        if (next > r.month) segments.push({ from: r.month, to: next, response: r.response });
+      });
+
       const rowEnd = Math.max(treatEnd, lastFu, deathMonth || 0, lastRespMonth, asctMonth || 0, 1);
       const name = (row.Name !== undefined && row.Name !== null && row.Name !== '') ? String(row.Name).trim() : (row.Patient_ID || `Patient ${index + 1}`);
 
@@ -121,6 +154,11 @@ const App = () => {
         txStatus,
         treatEnd,
         lastFu,
+        pdMonth,
+        solidEnd,
+        dashEnd,
+        segments,
+        mrds,
       };
     }).filter(Boolean);
   };
@@ -200,9 +238,9 @@ const App = () => {
     });
     return m;
   }, [data, maxDuration]);
-  const RESP_ORDER = colors.sCR ? ['MRD-', 'sCR', 'CR', 'VGPR', 'PR'] : ['CR', 'PR'];
+  const RESP_ORDER = colors.sCR ? ['sCR', 'CR', 'VGPR', 'PR'] : ['CR', 'PR'];
   const RANK = colors.sCR
-    ? { 'MRD-': 8, sCR: 7, CR: 6, VGPR: 5, PR: 4, MR: 3, SD: 2, PD: 1 }
+    ? { sCR: 7, CR: 6, VGPR: 5, PR: 4, MR: 3, SD: 2, PD: 1 }
     : { CR: 4, PR: 3, SD: 2, PD: 1 };
   const showBrackets = !!colors.sCR;
 
@@ -215,16 +253,18 @@ const App = () => {
       out.push(<g key={label}>{el}<text x={LEGX + 16} y={y + 4} fontSize="11.5" fill="#333">{label}</text></g>);
       y += 21;
     };
-    Object.keys(RANK).forEach(k => add(
-      <g>
-        <circle cx={LEGX} cy={y} r={5.5} fill={colors[k] || '#999'} stroke="#334155" strokeWidth="1" />
-        {k === 'MRD-' && <circle cx={LEGX} cy={y} r={2} fill="#fff" />}
-      </g>, k === 'MRD-' ? 'MRD−' : k));
+    Object.keys(RANK).filter(k => k !== 'PD').forEach(k => add(
+      <rect x={LEGX - 9} y={y - 5} width={18} height={10} rx={2} fill={colors[k] || '#999'} />, k));
+    add(<rect x={LEGX - 9} y={y - 5} width={18} height={10} rx={2} fill={colors.bar} />, 'Pre-assessment');
+    add(<circle cx={LEGX} cy={y} r={5.5} fill={colors.PD} stroke="#fff" strokeWidth="1.5" />, 'PD');
     y += 8;
+    add(<circle cx={LEGX} cy={y} r={4.5} fill="#fff" stroke="#999" strokeWidth="0.8" />, 'MRD−');
+    add(<circle cx={LEGX} cy={y} r={4.5} fill="#fff" stroke={colors.PD} strokeWidth="2" />, 'MRD+');
     add(<polygon points={`${LEGX},${y - 6} ${LEGX + 6},${y} ${LEGX},${y + 6} ${LEGX - 6},${y}`} fill={colors.ASCT} />, 'ASCT');
     add(<g><line x1={LEGX - 5} y1={y - 5} x2={LEGX + 5} y2={y + 5} stroke={colors.Death} strokeWidth={2.5} /><line x1={LEGX + 5} y1={y - 5} x2={LEGX - 5} y2={y + 5} stroke={colors.Death} strokeWidth={2.5} /></g>, 'Death');
     add(<polygon points={`${LEGX - 5},${y - 5} ${LEGX + 6},${y} ${LEGX - 5},${y + 5}`} fill="#374151" />, 'Ongoing');
-    add(<g><line x1={LEGX - 1} y1={y - 7} x2={LEGX - 1} y2={y + 7} stroke="#374151" strokeWidth={3} /><line x1={LEGX + 3} y1={y} x2={LEGX + 12} y2={y} stroke="#9AA0AA" strokeWidth={2} strokeDasharray="2 3" /></g>, 'EOT · FU');
+    add(<g><rect x={LEGX - 10} y={y - 5} width={20} height={10} fill={colors.CR} /><rect x={LEGX - 2} y={y - 6} width={4} height={12} fill="#fff" /><line x1={LEGX} y1={y - 8} x2={LEGX} y2={y + 8} stroke="#374151" strokeWidth={3} /></g>, 'EOT');
+    add(<line x1={LEGX - 9} y1={y} x2={LEGX + 9} y2={y} stroke="#9AA0AA" strokeWidth={2} strokeDasharray="2 3" />, 'Survival FU');
     add(<g><line x1={LEGX - 5} y1={y + 6} x2={LEGX + 1} y2={y - 6} stroke="#374151" strokeWidth={2.5} /><line x1={LEGX} y1={y + 6} x2={LEGX + 6} y2={y - 6} stroke="#374151" strokeWidth={2.5} /></g>, 'Drop-out');
     add(<circle cx={LEGX} cy={y} r={4.5} fill="#111" />, 'AE');
     return <g>{out}</g>;
@@ -551,7 +591,8 @@ const App = () => {
               • <code>Cohort</code> - 코호트/Arm 구분 (선택)<br/>
               • <code>Patient_ID</code> - 환자 ID<br/>
               • <code>C1D1</code> - 치료 시작일<br/>
-              • <code>Resp_date1, Response1, ...</code> - 반응 평가 (MRD-/sCR/CR/VGPR/PR/MR/SD/PD)<br/>
+              • <code>Resp_date1, Response1, ...</code> - 반응 평가 (sCR/CR/VGPR/PR/MR/SD/PD) — 평가 시점부터 다음 평가까지 막대 색<br/>
+              • <code>MRD_date1, MRD_result1, ...</code> - MRD 검사 (neg/pos) → 흰 ○ / 빨간 테 ○ (선택)<br/>
               • <code>ASCT_date</code> - ASCT 날짜 (선택)<br/>
               • <code>Death_date</code> - 사망 날짜 (선택)<br/>
               • <code>Name</code> - 환자 이름 (표시용, 선택)<br/>
@@ -559,7 +600,7 @@ const App = () => {
               • <code>LastDose_date</code> - 마지막 투여일=진행중(▶) 끝점 (선택)<br/>
               • <code>EOT_date</code> - 치료종료(EOT)일 = | 위치 (선택)<br/>
               • <code>Dropout_date</code> - 중도탈락일 = ⁄⁄ 위치 (선택)<br/>
-              • <code>LastFU_date</code> - 마지막 추적일 (선택)<br/>
+              • <code>LastFU_date</code> - 마지막 추적일 = 막대 끝 (PD·drop-out이 아니면 마지막 반응이 여기까지 유지된 것으로 그림)<br/>
               • <code>AE_name1, AE_date1, AE_grade1, ...</code> - 부작용 (선택)
             </p>
           </div>
@@ -682,17 +723,24 @@ const App = () => {
                       <g key={patient.id}>
                         <text x={LEFT - 10} y={cy + 4} textAnchor="end" fontSize="11" fill="#333">{patient.name}</text>
 
-                        <rect x={LEFT} y={y} width={Math.max(treatX - LEFT, 0)} height={settings.barHeight} fill={colors.bar} rx={3} opacity={0.9}/>
+                        <clipPath id={`clip-${patient.id}`}>
+                          <rect x={LEFT} y={y} width={Math.max(X(patient.solidEnd) - LEFT, 0)} height={settings.barHeight} rx={3}/>
+                        </clipPath>
+                        <g clipPath={`url(#clip-${patient.id})`}>
+                          {patient.segments.map((sg, i) => (
+                            <rect key={i} x={X(sg.from)} y={y} width={Math.max(X(sg.to) - X(sg.from) + 0.6, 0)} height={settings.barHeight}
+                              shapeRendering="crispEdges" fill={sg.response ? (colors[sg.response] || '#999') : colors.bar}/>
+                          ))}
+                        </g>
 
-                        {st === 'eot' && patient.lastFu > patient.treatEnd && (
-                          <line x1={treatX} y1={cy} x2={X(patient.lastFu)} y2={cy} stroke="#9AA0AA" strokeWidth="2" strokeDasharray="2 4"/>
+                        {patient.dashEnd != null && (
+                          <line x1={X(patient.solidEnd)} y1={cy} x2={X(patient.dashEnd)} y2={cy} stroke="#9AA0AA" strokeWidth="2" strokeDasharray="2 4"/>
                         )}
 
-                        {patient.responses.map((resp, i) => (
-                          <g key={i}>
-                            <circle cx={X(resp.month)} cy={cy} r={6} fill={colors[resp.response] || '#999'} stroke="#334155" strokeWidth="1"/>
-                            {resp.response === 'MRD-' && <circle cx={X(resp.month)} cy={cy} r={2.1} fill="#fff"/>}
-                          </g>
+                        {patient.mrds.map((m, i) => (
+                          m.result === 'neg'
+                            ? <circle key={`mrd${i}`} cx={X(m.month)} cy={cy} r={4.5} fill="#fff"/>
+                            : <circle key={`mrd${i}`} cx={X(m.month)} cy={cy} r={4.5} fill="#fff" stroke={colors.PD} strokeWidth="2"/>
                         ))}
 
                         {patient.asctMonth != null && (
@@ -711,10 +759,16 @@ const App = () => {
                         })}
 
                         {st === 'ongoing' && (
-                          <polygon points={`${treatX + 8},${cy - 6} ${treatX + 19},${cy} ${treatX + 8},${cy + 6}`} fill={mk}/>
+                          <polygon points={`${X(patient.solidEnd) + 8},${cy - 6} ${X(patient.solidEnd) + 19},${cy} ${X(patient.solidEnd) + 8},${cy + 6}`} fill={mk}/>
                         )}
                         {st === 'eot' && (
-                          <line x1={treatX} y1={cy - 11} x2={treatX} y2={cy + 11} stroke={mk} strokeWidth="3.5"/>
+                          <g>
+                            <rect x={treatX - 2} y={y - 1} width={4} height={settings.barHeight + 2} fill="#fff"/>
+                            <line x1={treatX} y1={cy - 11} x2={treatX} y2={cy + 11} stroke={mk} strokeWidth="3"/>
+                          </g>
+                        )}
+                        {patient.pdMonth != null && (
+                          <circle cx={X(patient.pdMonth)} cy={cy} r={6} fill={colors.PD} stroke="#fff" strokeWidth="1.5"/>
                         )}
                         {st === 'dropout' && (
                           <g>
