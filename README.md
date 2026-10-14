@@ -30,6 +30,7 @@
 | ASCT_date | 자가조혈모세포이식 날짜 | 선택 |
 | MRD_date1, MRD_result1, ... | MRD 검사일·결과 (neg/pos) | 선택 |
 | Tx_status / EOT_date / Dropout_date / LastDose_date | ongoing·EOT·dropout 및 날짜 | 선택 |
+| DoseRed_date1, ... | 용량 감량일 (막대 안 ▼) | 선택 |
 | LastFU_date | 마지막 추적일 = 막대 끝 | 선택 |
 | Death_date | 사망일 | 선택 |
 | AE_name1, AE_date1, AE_grade1, ... | 주요 이상반응 (막대 위 라벨) | 선택 |
