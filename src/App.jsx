@@ -271,7 +271,7 @@ const App = () => {
     add(<polygon points={`${LEGX},${y - 6} ${LEGX + 6},${y} ${LEGX},${y + 6} ${LEGX - 6},${y}`} fill={colors.ASCT} />, 'ASCT');
     add(<g><line x1={LEGX - 5} y1={y - 5} x2={LEGX + 5} y2={y + 5} stroke={colors.Death} strokeWidth={2.5} /><line x1={LEGX + 5} y1={y - 5} x2={LEGX - 5} y2={y + 5} stroke={colors.Death} strokeWidth={2.5} /></g>, 'Death');
     add(<polygon points={`${LEGX - 5},${y - 5} ${LEGX + 6},${y} ${LEGX - 5},${y + 5}`} fill="#374151" />, 'Alive at cutoff');
-    add(<polygon points={`${LEGX - 4},${y - 4} ${LEGX + 4},${y - 4} ${LEGX},${y + 4.5}`} fill={colors.DoseRed} />, 'Dose reduction');
+    add(<polygon points={`${LEGX - 4.5},${y - 3.9} ${LEGX + 4.5},${y - 3.9} ${LEGX},${y + 3.9}`} fill={colors.DoseRed} />, 'Dose reduction');
     add(<g><rect x={LEGX - 10} y={y - 5} width={20} height={10} fill={colors.CR} /><rect x={LEGX - 2} y={y - 6} width={4} height={12} fill="#fff" /><line x1={LEGX} y1={y - 9} x2={LEGX} y2={y + 9} stroke="#374151" strokeWidth={3} /></g>, 'EOT');
     add(<line x1={LEGX - 9} y1={y} x2={LEGX + 9} y2={y} stroke="#9AA0AA" strokeWidth={2} strokeDasharray="2 3" />, 'Survival FU');
     add(<g><line x1={LEGX - 5} y1={y + 6} x2={LEGX + 1} y2={y - 6} stroke="#374151" strokeWidth={2.5} /><line x1={LEGX} y1={y + 6} x2={LEGX + 6} y2={y - 6} stroke="#374151" strokeWidth={2.5} /></g>, 'Drop-out');
@@ -779,7 +779,7 @@ const App = () => {
                           </g>
                         )}
                         {patient.doseReds.map((m, i) => (
-                          <polygon key={`dr${i}`} points={`${X(m) - 4},${cy - 4} ${X(m) + 4},${cy - 4} ${X(m)},${cy + 4.5}`} fill={colors.DoseRed}/>
+                          <polygon key={`dr${i}`} points={`${X(m) - 4.5},${cy - 3.9} ${X(m) + 4.5},${cy - 3.9} ${X(m)},${cy + 3.9}`} fill={colors.DoseRed}/>
                         ))}
                         {patient.pdMonth != null && (
                           <circle cx={X(patient.pdMonth)} cy={cy} r={6} fill={colors.PD} stroke="#fff" strokeWidth="1.5"/>
