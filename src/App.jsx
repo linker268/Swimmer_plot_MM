@@ -25,7 +25,8 @@ const App = () => {
     PD: '#D62728',    // Progressive Disease - 빨강 (경보)
     ASCT: '#9B59B6',  // ASCT - 보라
     Death: '#7A0C0C', // Death - 진한 적갈색 (PD 빨강과 구분)
-    bar: '#B8C0CC',   // 환자 타임라인 막대 - 중립 회색
+    bar: '#B8C0CC',
+    DoseRed: '#F59E0B', // dose reduction ▼ (호박색 — 파랑 램프·보라·빨강과 겹치지 않음)   // 환자 타임라인 막대 - 중립 회색
   };
 
   const responseOrder = ['sCR', 'CR', 'VGPR', 'PR', 'MR', 'SD', 'PD'];
@@ -88,6 +89,12 @@ const App = () => {
           if (/mrd/i.test(resp)) { if (m !== null) mrds.push({ month: m, result: 'neg' }); resp = 'sCR'; }
           if (m !== null) responses.push({ month: m, response: resp });
         }
+      }
+
+      const doseReds = [];
+      for (let i = 1; i <= 10; i++) {
+        const d = row[`DoseRed_date${i}`];
+        if (d) { const m = mo(d); if (m !== null) doseReds.push(m); }
       }
 
       const aes = [];
@@ -158,6 +165,7 @@ const App = () => {
         solidEnd,
         dashEnd,
         segments,
+        doseReds,
         mrds,
       };
     }).filter(Boolean);
@@ -262,8 +270,9 @@ const App = () => {
     add(<circle cx={LEGX} cy={y} r={4.5} fill="#fff" stroke={colors.PD} strokeWidth="2" />, 'MRD+');
     add(<polygon points={`${LEGX},${y - 6} ${LEGX + 6},${y} ${LEGX},${y + 6} ${LEGX - 6},${y}`} fill={colors.ASCT} />, 'ASCT');
     add(<g><line x1={LEGX - 5} y1={y - 5} x2={LEGX + 5} y2={y + 5} stroke={colors.Death} strokeWidth={2.5} /><line x1={LEGX + 5} y1={y - 5} x2={LEGX - 5} y2={y + 5} stroke={colors.Death} strokeWidth={2.5} /></g>, 'Death');
-    add(<polygon points={`${LEGX - 5},${y - 5} ${LEGX + 6},${y} ${LEGX - 5},${y + 5}`} fill="#374151" />, 'Ongoing');
-    add(<g><rect x={LEGX - 10} y={y - 5} width={20} height={10} fill={colors.CR} /><rect x={LEGX - 2} y={y - 6} width={4} height={12} fill="#fff" /><line x1={LEGX} y1={y - 8} x2={LEGX} y2={y + 8} stroke="#374151" strokeWidth={3} /></g>, 'EOT');
+    add(<polygon points={`${LEGX - 5},${y - 5} ${LEGX + 6},${y} ${LEGX - 5},${y + 5}`} fill="#374151" />, 'Alive at cutoff');
+    add(<polygon points={`${LEGX - 4},${y - 4} ${LEGX + 4},${y - 4} ${LEGX},${y + 4.5}`} fill={colors.DoseRed} />, 'Dose reduction');
+    add(<g><rect x={LEGX - 10} y={y - 5} width={20} height={10} fill={colors.CR} /><rect x={LEGX - 2} y={y - 6} width={4} height={12} fill="#fff" /><line x1={LEGX} y1={y - 9} x2={LEGX} y2={y + 9} stroke="#374151" strokeWidth={3} /></g>, 'EOT');
     add(<line x1={LEGX - 9} y1={y} x2={LEGX + 9} y2={y} stroke="#9AA0AA" strokeWidth={2} strokeDasharray="2 3" />, 'Survival FU');
     add(<g><line x1={LEGX - 5} y1={y + 6} x2={LEGX + 1} y2={y - 6} stroke="#374151" strokeWidth={2.5} /><line x1={LEGX} y1={y + 6} x2={LEGX + 6} y2={y - 6} stroke="#374151" strokeWidth={2.5} /></g>, 'Drop-out');
     add(<circle cx={LEGX} cy={y} r={4.5} fill="#111" />, 'AE');
@@ -600,6 +609,7 @@ const App = () => {
               • <code>LastDose_date</code> - 마지막 투여일=진행중(▶) 끝점 (선택)<br/>
               • <code>EOT_date</code> - 치료종료(EOT)일 = | 위치 (선택)<br/>
               • <code>Dropout_date</code> - 중도탈락일 = ⁄⁄ 위치 (선택)<br/>
+              • <code>DoseRed_date1, ...</code> - 용량 감량일 = 막대 안 ▼ (선택)<br/>
               • <code>LastFU_date</code> - 마지막 추적일 = 막대 끝 (PD·drop-out이 아니면 마지막 반응이 여기까지 유지된 것으로 그림)<br/>
               • <code>AE_name1, AE_date1, AE_grade1, ...</code> - 부작용 (선택)
             </p>
@@ -758,15 +768,19 @@ const App = () => {
                           );
                         })}
 
-                        {st === 'ongoing' && (
+                        {/* ▶ = data cutoff 시점에 생존·추적 중 (치료 중이든 종료 후든). 사망·PD·drop-out은 없음 */}
+                        {patient.deathMonth == null && patient.pdMonth == null && st !== 'dropout' && (
                           <polygon points={`${X(patient.solidEnd) + 8},${cy - 6} ${X(patient.solidEnd) + 19},${cy} ${X(patient.solidEnd) + 8},${cy + 6}`} fill={mk}/>
                         )}
                         {st === 'eot' && (
                           <g>
                             <rect x={treatX - 2} y={y - 1} width={4} height={settings.barHeight + 2} fill="#fff"/>
-                            <line x1={treatX} y1={cy - 11} x2={treatX} y2={cy + 11} stroke={mk} strokeWidth="3"/>
+                            <line x1={treatX} y1={y - 5} x2={treatX} y2={y + settings.barHeight + 5} stroke={mk} strokeWidth="3"/>
                           </g>
                         )}
+                        {patient.doseReds.map((m, i) => (
+                          <polygon key={`dr${i}`} points={`${X(m) - 4},${cy - 4} ${X(m) + 4},${cy - 4} ${X(m)},${cy + 4.5}`} fill={colors.DoseRed}/>
+                        ))}
                         {patient.pdMonth != null && (
                           <circle cx={X(patient.pdMonth)} cy={cy} r={6} fill={colors.PD} stroke="#fff" strokeWidth="1.5"/>
                         )}
