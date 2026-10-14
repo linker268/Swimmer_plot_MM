@@ -26,7 +26,7 @@ const App = () => {
     ASCT: '#9B59B6',  // ASCT - 보라
     Death: '#7A0C0C', // Death - 진한 적갈색 (PD 빨강과 구분)
     bar: '#B8C0CC',
-    EOT: '#16A34A',     // 치료 종료 세로선 (초록 — 남색 위에서 또렷, PD 빨강과 구분)
+    EOT: '#15803D',     // 치료 종료 세로선 (차분한 초록 — 남색 위에서 또렷, PD 빨강과 구분)
     DoseRed: '#F59E0B', // dose reduction ▼ (호박색 — 파랑 램프·보라·빨강과 겹치지 않음)   // 환자 타임라인 막대 - 중립 회색
   };
 
@@ -273,7 +273,7 @@ const App = () => {
     add(<g><line x1={LEGX - 5} y1={y - 5} x2={LEGX + 5} y2={y + 5} stroke={colors.Death} strokeWidth={2.5} /><line x1={LEGX + 5} y1={y - 5} x2={LEGX - 5} y2={y + 5} stroke={colors.Death} strokeWidth={2.5} /></g>, 'Death');
     add(<polygon points={`${LEGX - 5},${y - 5} ${LEGX + 6},${y} ${LEGX - 5},${y + 5}`} fill="#374151" />, 'Alive at cutoff');
     add(<polygon points={`${LEGX - 4.5},${y - 3.9} ${LEGX + 4.5},${y - 3.9} ${LEGX},${y + 3.9}`} fill={colors.DoseRed} />, 'Dose reduction');
-    add(<g><rect x={LEGX - 10} y={y - 5} width={20} height={10} fill={colors.CR} /><rect x={LEGX - 2} y={y - 6} width={4} height={12} fill="#fff" /><line x1={LEGX} y1={y - 9} x2={LEGX} y2={y + 9} stroke={colors.EOT} strokeWidth={3} /></g>, 'EOT');
+    add(<line x1={LEGX} y1={y - 9} x2={LEGX} y2={y + 9} stroke={colors.EOT} strokeWidth={3} />, 'EOT');
     add(<line x1={LEGX - 9} y1={y} x2={LEGX + 9} y2={y} stroke="#9AA0AA" strokeWidth={2} strokeDasharray="2 3" />, 'Survival FU');
     add(<g><line x1={LEGX - 5} y1={y + 6} x2={LEGX + 1} y2={y - 6} stroke="#374151" strokeWidth={2.5} /><line x1={LEGX} y1={y + 6} x2={LEGX + 6} y2={y - 6} stroke="#374151" strokeWidth={2.5} /></g>, 'Drop-out');
     add(<circle cx={LEGX} cy={y} r={4.5} fill="#111" />, 'AE');
