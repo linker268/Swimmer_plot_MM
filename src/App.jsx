@@ -806,9 +806,10 @@ const App = () => {
                   yOffset += cohortHeight + 40;
 
                   const bandCY = cohortStart + cohortHeight / 2;
-                  // 분모 = 반응 평가가 1회 이상 있는 환자(response-evaluable).
-                  // 아직 평가 전이거나 평가 없이 빠진 환자는 반응률 계산에서 제외한다.
-                  const evaluable = patients.filter(p => p.responses.some(r => RANK[r.response] !== undefined));
+                  // 분모 = 반응 평가가 1회 이상 있는 환자 + 첫 평가 전에 사망·중도 탈락한 환자(무반응으로 계산).
+                  // 제외되는 것은 아직 첫 평가 시점에 도달하지 않은 환자뿐이다.
+                  const evaluable = patients.filter(p =>
+                    p.responses.some(r => RANK[r.response] !== undefined) || p.deathMonth != null || p.txStatus === 'dropout');
                   const nSum = evaluable.length;
                   const nAll = patients.length;
                   const cnt = {};
@@ -850,7 +851,10 @@ const App = () => {
                         </g>
                       ))}
                       <text x={SUMX} y={sY(orr) - 9} textAnchor="middle" fontSize="13" fontWeight="700" fill="#111">ORR {orr.toFixed(1)}%</text>
-                      <text x={SUMX} y={sY(0) + 14} textAnchor="middle" fontSize="10" fill="#333">{nSum === nAll ? `n = ${nSum}` : `n = ${nSum} evaluable (of ${nAll})`}</text>
+                      <text x={SUMX} y={sY(0) + 14} textAnchor="middle" fontSize="10" fill="#333">{`n = ${nSum}`}</text>
+                      {nSum < nAll && (
+                        <text x={SUMX} y={sY(0) + 26} textAnchor="middle" fontSize="9" fill="#555">{`(${nAll - nSum} not yet assessed)`}</text>
+                      )}
                       {showBrackets && geCR > 0 && (
                         <>
                           <path d={`M ${SUMX - SBARW / 2 - 8} ${sY(0)} L ${SUMX - SBARW / 2 - 14} ${sY(0)} L ${SUMX - SBARW / 2 - 14} ${sY(geCR)} L ${SUMX - SBARW / 2 - 8} ${sY(geCR)}`} fill="none" stroke="#555" strokeWidth="1.2"/>
