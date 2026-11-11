@@ -806,9 +806,13 @@ const App = () => {
                   yOffset += cohortHeight + 40;
 
                   const bandCY = cohortStart + cohortHeight / 2;
-                  const nSum = patients.length;
+                  // 분모 = 반응 평가가 1회 이상 있는 환자(response-evaluable).
+                  // 아직 평가 전이거나 평가 없이 빠진 환자는 반응률 계산에서 제외한다.
+                  const evaluable = patients.filter(p => p.responses.some(r => RANK[r.response] !== undefined));
+                  const nSum = evaluable.length;
+                  const nAll = patients.length;
                   const cnt = {};
-                  patients.forEach(p => {
+                  evaluable.forEach(p => {
                     let best = null, br = -1;
                     p.responses.forEach(r => { const rk = RANK[r.response]; if (rk !== undefined && rk > br) { br = rk; best = r.response; } });
                     if (best && RESP_ORDER.includes(best)) cnt[best] = (cnt[best] || 0) + 1;
@@ -846,6 +850,7 @@ const App = () => {
                         </g>
                       ))}
                       <text x={SUMX} y={sY(orr) - 9} textAnchor="middle" fontSize="13" fontWeight="700" fill="#111">ORR {orr.toFixed(1)}%</text>
+                      <text x={SUMX} y={sY(0) + 14} textAnchor="middle" fontSize="10" fill="#333">{nSum === nAll ? `n = ${nSum}` : `n = ${nSum} evaluable (of ${nAll})`}</text>
                       {showBrackets && geCR > 0 && (
                         <>
                           <path d={`M ${SUMX - SBARW / 2 - 8} ${sY(0)} L ${SUMX - SBARW / 2 - 14} ${sY(0)} L ${SUMX - SBARW / 2 - 14} ${sY(geCR)} L ${SUMX - SBARW / 2 - 8} ${sY(geCR)}`} fill="none" stroke="#555" strokeWidth="1.2"/>
