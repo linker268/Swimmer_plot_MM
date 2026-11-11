@@ -858,7 +858,7 @@ const App = () => {
                           )}
                         </g>
                       ))}
-                      <text x={SUMX} y={sY(orr) - 9} textAnchor="middle" fontSize="13" fontWeight="700" fill="#111">ORR {orr.toFixed(1)}%</text>
+                      <text x={SUMX} y={sY(orr) - 7} textAnchor="middle" fontSize="12" fontWeight="700" fill="#111">ORR {orr.toFixed(1)}%</text>
                       <text x={SUMX} y={sY(0) + 14} textAnchor="middle" fontSize="10" fill="#333">{`n = ${nSum}`}</text>
                       {nSum < nAll && (
                         <text x={SUMX} y={sY(0) + 26} textAnchor="middle" fontSize="9" fill="#555">{`(${nAll - nSum} not yet assessed)`}</text>
